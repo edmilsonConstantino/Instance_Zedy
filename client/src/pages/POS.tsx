@@ -482,13 +482,17 @@ export default function POS() {
                         )}
                       </div>
 
-                      {/* Info + Controlos (tudo dentro do flex-1) */}
+                      {/* Info */}
                       <div className="flex-1 min-w-0">
-                        {/* Linha 1: nome + controlos */}
-                        <div className="flex items-center gap-1">
-                          <h3 className="font-semibold text-xs leading-tight truncate text-gray-800 flex-1 min-w-0">{product.name}</h3>
-                          {/* Controlos */}
-                          <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                        {/* Linha 1: nome */}
+                        <h3 className="font-semibold text-xs leading-tight truncate text-gray-800">{product.name}</h3>
+                        {/* Linha 2: preço + unit + controlos */}
+                        <div className="flex items-center gap-1 mt-1" onClick={e => e.stopPropagation()}>
+                          <span className="font-bold text-orange-500 text-xs shrink-0">{formatCurrency(parsedPrice)}</span>
+                          <span className="text-[9px] text-gray-400 border border-gray-200 rounded-full px-1 shrink-0">{product.unit}</span>
+                          {product.unit === 'kg' && <span className="text-[9px] text-emerald-600 shrink-0">Pesável</span>}
+                          {/* Controlos sempre à direita */}
+                          <div className="flex items-center gap-0.5 ml-auto shrink-0">
                             <button
                               type="button"
                               className={`h-7 w-7 rounded-full flex items-center justify-center transition-colors active:scale-95 ${cartItem ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-200'}`}
@@ -498,7 +502,7 @@ export default function POS() {
                             >
                               <Minus className="h-3 w-3 text-white" />
                             </button>
-                            <span className="min-w-[20px] text-center text-xs font-bold text-gray-700">
+                            <span className="w-5 text-center text-xs font-bold text-gray-700">
                               {cartItem ? cartItem.quantity.toFixed(product.unit === 'kg' ? 1 : 0) : '0'}
                             </span>
                             <button
@@ -511,13 +515,6 @@ export default function POS() {
                               <Plus className="h-3 w-3 text-white" />
                             </button>
                           </div>
-                        </div>
-                        {/* Linha 2: preço + unit + stock */}
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <span className="font-bold text-orange-500 text-xs">{formatCurrency(parsedPrice)}</span>
-                          <span className="text-[9px] text-gray-400 border border-gray-200 rounded-full px-1">{product.unit}</span>
-                          {product.unit === 'kg' && <span className="text-[9px] text-emerald-600">Pesável</span>}
-                          <span className="text-[9px] text-gray-400 ml-auto">Est: {parsedStock.toFixed(product.unit === 'kg' ? 1 : 0)}</span>
                         </div>
                       </div>
                     </div>
