@@ -448,76 +448,68 @@ export default function POS() {
 
         <ScrollArea className="flex-1 p-3 lg:p-4">
           {viewMode === 'list' ? (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {filteredProducts.map(product => {
                 const parsedStock = parseFloat(product.stock);
-                const parsedMinStock = parseFloat(product.minStock);
                 const parsedPrice = parseFloat(product.price);
                 const cartItem = cart.find(i => i.productId === product.id);
+                const qty = cartItem ? cartItem.quantity.toFixed(product.unit === 'kg' ? 1 : 0) : '0';
 
                 return (
-                    <div
-                      key={product.id}
-                      className={`flex items-center gap-2 px-2 py-2 bg-white rounded-2xl border shadow-sm transition-all ${parsedStock <= 0 ? 'opacity-50 pointer-events-none border-gray-100' : cartItem ? 'border-emerald-300 bg-emerald-50/40' : 'border-gray-100'}`}
-                      data-testid={`card-product-${product.id}`}
-                    >
-                      {/* Imagem / Inicial */}
-                      <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0 border border-emerald-100 relative overflow-hidden">
-                        {product.image ? (
-                          <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-emerald-600 text-base font-bold leading-none">
-                            {product.name.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                        {parsedStock <= 0 && (
-                          <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                            <span className="text-white text-[7px] font-bold">Esgotado</span>
-                          </div>
-                        )}
-                        {cartItem && (
-                          <div className="absolute top-0 right-0 h-4 w-4 bg-emerald-500 rounded-bl-lg flex items-center justify-center">
-                            <Check className="h-2.5 w-2.5 text-white" />
-                          </div>
-                        )}
-                      </div>
+                  <div
+                    key={product.id}
+                    className={`w-full flex items-center bg-white rounded-xl border shadow-sm overflow-hidden transition-all ${parsedStock <= 0 ? 'opacity-50 pointer-events-none border-gray-100' : cartItem ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-100'}`}
+                    data-testid={`card-product-${product.id}`}
+                  >
+                    {/* Faixa colorida esquerda */}
+                    <div className={`w-1 self-stretch shrink-0 ${cartItem ? 'bg-emerald-400' : 'bg-transparent'}`} />
 
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        {/* Linha 1: nome */}
-                        <h3 className="font-semibold text-xs leading-tight truncate text-gray-800">{product.name}</h3>
-                        {/* Linha 2: preço + unit + controlos */}
-                        <div className="flex items-center gap-1 mt-1" onClick={e => e.stopPropagation()}>
-                          <span className="font-bold text-orange-500 text-xs shrink-0">{formatCurrency(parsedPrice)}</span>
-                          <span className="text-[9px] text-gray-400 border border-gray-200 rounded-full px-1 shrink-0">{product.unit}</span>
-                          {product.unit === 'kg' && <span className="text-[9px] text-emerald-600 shrink-0">Pesável</span>}
-                          {/* Controlos sempre à direita */}
-                          <div className="flex items-center gap-0.5 ml-auto shrink-0">
-                            <button
-                              type="button"
-                              className={`h-7 w-7 rounded-full flex items-center justify-center transition-colors active:scale-95 ${cartItem ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-200'}`}
-                              onClick={() => cartItem && handleQuantityChange(product.id, -1)}
-                              disabled={!cartItem || parsedStock <= 0}
-                              data-testid={`button-decrease-list-${product.id}`}
-                            >
-                              <Minus className="h-3 w-3 text-white" />
-                            </button>
-                            <span className="w-5 text-center text-xs font-bold text-gray-700">
-                              {cartItem ? cartItem.quantity.toFixed(product.unit === 'kg' ? 1 : 0) : '0'}
-                            </span>
-                            <button
-                              type="button"
-                              className="h-7 w-7 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center transition-colors active:scale-95 disabled:opacity-40"
-                              onClick={(e) => { e.stopPropagation(); if (parsedStock > 0) handleAddProduct(product); }}
-                              disabled={parsedStock <= 0}
-                              data-testid={`button-add-${product.id}`}
-                            >
-                              <Plus className="h-3 w-3 text-white" />
-                            </button>
-                          </div>
+                    {/* Inicial */}
+                    <div className="h-9 w-9 m-1.5 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0 border border-emerald-100 relative overflow-hidden">
+                      {product.image
+                        ? <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                        : <span className="text-emerald-600 text-sm font-bold">{product.name.charAt(0).toUpperCase()}</span>
+                      }
+                      {parsedStock <= 0 && (
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                          <span className="text-white text-[7px] font-bold leading-tight text-center">Esgotado</span>
                         </div>
+                      )}
+                    </div>
+
+                    {/* Nome + preço (flex-1, truncate) */}
+                    <div className="flex-1 min-w-0 py-1.5 pr-1">
+                      <p className="text-xs font-semibold text-gray-800 truncate leading-tight">{product.name}</p>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-xs font-bold text-orange-500">{formatCurrency(parsedPrice)}</span>
+                        <span className="text-[9px] text-gray-400">/{product.unit}</span>
+                        {product.unit === 'kg' && <Scale className="h-2.5 w-2.5 text-emerald-500" />}
                       </div>
                     </div>
+
+                    {/* Controlos — largura fixa, nunca desaparece */}
+                    <div className="flex items-center shrink-0 pr-2 gap-1" onClick={e => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className={`h-7 w-7 rounded-full flex items-center justify-center transition-colors active:scale-95 ${cartItem ? 'bg-red-500' : 'bg-gray-200'}`}
+                        onClick={() => cartItem && handleQuantityChange(product.id, -1)}
+                        disabled={!cartItem || parsedStock <= 0}
+                        data-testid={`button-decrease-list-${product.id}`}
+                      >
+                        <Minus className="h-3 w-3 text-white" />
+                      </button>
+                      <span className="w-6 text-center text-xs font-bold text-gray-800 tabular-nums">{qty}</span>
+                      <button
+                        type="button"
+                        className="h-7 w-7 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center transition-colors active:scale-95 disabled:opacity-40"
+                        onClick={(e) => { e.stopPropagation(); if (parsedStock > 0) handleAddProduct(product); }}
+                        disabled={parsedStock <= 0}
+                        data-testid={`button-add-${product.id}`}
+                      >
+                        <Plus className="h-3 w-3 text-white" />
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </div>
