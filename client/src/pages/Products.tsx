@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Plus, FileDown, FileUp, AlertTriangle, Pencil, Trash2, AlertCircle, ArrowUp } from 'lucide-react';
+import { Search, Plus, FileDown, FileUp, AlertTriangle, Pencil, Trash2, AlertCircle, ArrowUp, ScanLine } from 'lucide-react';
+import { BarcodeScanner } from '@/components/BarcodeScanner';
 import { formatCurrency } from '@/lib/utils';
 import { Product, productsApi, categoriesApi, systemApi } from '@/lib/api';
 import * as XLSX from 'xlsx';
@@ -107,6 +108,7 @@ export default function Products() {
   const [increasePrice, setIncreasePrice] = useState('');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [scannerForField, setScannerForField] = useState<'new' | 'edit' | null>(null);
 
   const increaseStockMutation = useMutation({
     mutationFn: ({ id, quantity, price }: { id: string; quantity: number; price?: number }) => 
@@ -345,12 +347,23 @@ export default function Products() {
                   </div>
                   <div className="grid gap-2">
                     <Label>Código (SKU)</Label>
-                    <Input
-                      value={newProduct.sku}
-                      onChange={e => setNewProduct({...newProduct, sku: e.target.value})}
-                      placeholder="Gerado automaticamente se vazio"
-                      data-testid="input-product-sku"
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        value={newProduct.sku}
+                        onChange={e => setNewProduct({...newProduct, sku: e.target.value})}
+                        placeholder="Gerado automaticamente se vazio"
+                        data-testid="input-product-sku"
+                        className="flex-1"
+                      />
+                      <button
+                        type="button"
+                        className="h-10 w-10 rounded-lg bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center shrink-0 transition-colors"
+                        onClick={() => setScannerForField('new')}
+                        title="Scan código de barras"
+                      >
+                        <ScanLine className="h-4 w-4 text-white" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -534,11 +547,22 @@ export default function Products() {
                 </div>
                 <div className="grid gap-2">
                   <Label>Código (SKU)</Label>
-                  <Input 
-                    value={editingProduct.sku} 
-                    onChange={e => setEditingProduct({...editingProduct, sku: e.target.value})}
-                    data-testid="input-edit-product-sku"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      value={editingProduct.sku}
+                      onChange={e => setEditingProduct({...editingProduct, sku: e.target.value})}
+                      data-testid="input-edit-product-sku"
+                      className="flex-1"
+                    />
+                    <button
+                      type="button"
+                      className="h-10 w-10 rounded-lg bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center shrink-0 transition-colors"
+                      onClick={() => setScannerForField('edit')}
+                      title="Scan código de barras"
+                    >
+                      <ScanLine className="h-4 w-4 text-white" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -801,6 +825,20 @@ export default function Products() {
           </div>
         </CardContent>
       </Card>
+
+      {scannerForField && (
+        <BarcodeScanner
+          onScan={(code) => {
+            if (scannerForField === 'new') {
+              setNewProduct(p => ({ ...p, sku: code }));
+            } else if (scannerForField === 'edit' && editingProduct) {
+              setEditingProduct(p => p ? { ...p, sku: code } : p);
+            }
+            setScannerForField(null);
+          }}
+          onClose={() => setScannerForField(null)}
+        />
+      )}
     </div>
   );
 }

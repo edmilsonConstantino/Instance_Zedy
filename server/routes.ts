@@ -1,10 +1,12 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import os from "os";
 import { storage } from "./storage";
 import { insertUserSchema, insertProductSchema, insertCategorySchema, insertSaleSchema } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import { seedDatabase } from "../db/init";
+import { createScannerToken, consumeBarcodes, pushBarcode, pingToken, listSessions, revokeToken, renewToken, TOKEN_TTL_MS } from "./scannerToken";
 
 // Session augmentation
 declare module 'express-session' {
@@ -977,6 +979,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // ==================== NETWORK ROUTES ====================
+
+  app.get("/api/network/local-access", (req: Request, res: Response) => {
+    try {
+      const port = parseInt(String(process.env.PORT || req.get('host')?.split(':')[1] || 9001), 10);
+      const protocol = (process.env.HTTPS === "1" || process.env.HTTPS === "true") ? "https" : (req.protocol || "http");
+      const ips: string[] = [];
+      const nets = os.networkInterfaces();
+      for (const name of Object.keys(nets)) {
+        for (const net of nets[name] || []) {
+          const isIPv4 = net.family === 'IPv4' || (net as { family?: number }).family === 4;
+          if (isIPv4 && !net.internal) ips.push(net.address);
+        }
+      }
+      const baseUrl = ips.length > 0 ? `${protocol}://${ips[0]}:${port}` : null;
+      res.json({ baseUrl, ips, port });
+    } catch (error) {
+      console.error("Network local-access error:", error);
+      res.status(500).json({ error: "Erro ao obter IP" });
+    }
+  });
+
+  // ==================== SCANNER ROUTES ====================
+
+  app.post("/api/scanner/start", requireAuth, (req: Request, res: Response) => {
+    try {
+      const ua = (req.headers['user-agent'] as string) || '';
+      const { token } = createScannerToken(req.session.userId!, req.session.name || req.session.username || '', ua);
+      const port = parseInt(String(process.env.PORT || req.get('host')?.split(':')[1] || 9001), 10);
+      const protocol = (process.env.HTTPS === "1" || process.env.HTTPS === "true") ? "https" : (req.protocol || "http");
+      const origin = req.get('origin') || req.get('referer')?.replace(/\/[^/]*$/, '') || `${protocol}://${req.get('host')}`;
+      let baseUrl = origin;
+      const nets = os.networkInterfaces();
+      outer: for (const name of Object.keys(nets)) {
+        for (const net of nets[name] || []) {
+          const isIPv4 = net.family === 'IPv4' || (net as { family?: number }).family === 4;
+          if (isIPv4 && !net.internal) {
+            baseUrl = `${protocol}://${net.address}:${port}`;
+            break outer;
+          }
+        }
+      }
+      const url = `${baseUrl}/scanner/${token}`;
+      res.json({ token, url });
+    } catch (error) {
+      console.error("Scanner start error:", error);
+      res.status(500).json({ error: "Erro ao gerar link do scanner" });
+    }
+  });
+
+  app.get("/api/scanner/poll/:token", requireAuth, (req: Request, res: Response) => {
+    try {
+      const barcodes = consumeBarcodes(req.params.token, req.session.userId!);
+      res.json({ barcodes });
+    } catch (error) {
+      console.error("Scanner poll error:", error);
+      res.status(500).json({ error: "Erro ao obter códigos" });
+    }
+  });
+
+  app.post("/api/scanner/send", async (req: Request, res: Response) => {
+    try {
+      const { token, barcode } = req.body;
+      const ua = (req.headers['user-agent'] as string) || '';
+      if (!token || typeof barcode !== 'string' || !barcode.trim()) {
+        return res.status(400).json({ error: "token e barcode são obrigatórios" });
+      }
+      const ok = pushBarcode(token, barcode.trim(), ua);
+      if (!ok) return res.status(404).json({ error: "Link expirado ou inválido" });
+      const product = await storage.getProductBySku(barcode.trim());
+      res.json({ ok: true, product: product ? { name: product.name } : undefined });
+    } catch (error) {
+      console.error("Scanner send error:", error);
+      res.status(500).json({ error: "Erro ao enviar código" });
+    }
+  });
+
+  app.post("/api/scanner/ping", (req: Request, res: Response) => {
+    try {
+      const { token } = req.body;
+      const ua = (req.headers['user-agent'] as string) || '';
+      if (!token) return res.status(400).json({ error: "token obrigatório" });
+      const session = pingToken(token, ua);
+      if (!session) return res.status(404).json({ error: "Link expirado ou inválido" });
+      res.json({
+        ok: true,
+        expiresIn: Math.max(0, Math.floor((TOKEN_TTL_MS - (Date.now() - session.createdAt)) / 1000)),
+        deviceType: session.deviceType,
+      });
+    } catch (error) {
+      console.error("Scanner ping error:", error);
+      res.status(500).json({ error: "Erro" });
+    }
+  });
+
+  app.get("/api/scanner/sessions", requireAuth, (req: Request, res: Response) => {
+    try {
+      const sessions = listSessions(req.session.userId!);
+      res.json(sessions);
+    } catch (error) {
+      console.error("Scanner sessions error:", error);
+      res.status(500).json({ error: "Erro ao listar sessões" });
+    }
+  });
+
+  app.post("/api/scanner/revoke/:token", requireAuth, (req: Request, res: Response) => {
+    try {
+      const ok = revokeToken(req.params.token, req.session.userId!);
+      if (!ok) return res.status(404).json({ error: "Sessão não encontrada ou já expirada" });
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Scanner revoke error:", error);
+      res.status(500).json({ error: "Erro ao revogar" });
+    }
+  });
+
+  app.post("/api/scanner/renew", requireAuth, (req: Request, res: Response) => {
+    try {
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ error: "token obrigatório" });
+      const result = renewToken(token, req.session.userId!, req.session.name || req.session.username || '');
+      if (!result) return res.status(404).json({ error: "Sessão não encontrada ou já expirada" });
+      const port = parseInt(String(process.env.PORT || req.get('host')?.split(':')[1] || 9001), 10);
+      const protocol = (process.env.HTTPS === "1" || process.env.HTTPS === "true") ? "https" : (req.protocol || "http");
+      const origin = req.get('origin') || req.get('referer')?.replace(/\/[^/]*$/, '') || `${protocol}://${req.get('host')}`;
+      let baseUrl = origin;
+      const nets = os.networkInterfaces();
+      outer: for (const name of Object.keys(nets)) {
+        for (const net of nets[name] || []) {
+          const isIPv4 = net.family === 'IPv4' || (net as { family?: number }).family === 4;
+          if (isIPv4 && !net.internal) { baseUrl = `${protocol}://${net.address}:${port}`; break outer; }
+        }
+      }
+      const url = `${baseUrl}/scanner/${result.token}`;
+      res.json({ token: result.token, url });
+    } catch (error) {
+      console.error("Scanner renew error:", error);
+      res.status(500).json({ error: "Erro ao renovar" });
+    }
+  });
+
+  // ==================== END SCANNER ROUTES ====================
 
   const httpServer = createServer(app);
 

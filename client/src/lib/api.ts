@@ -442,3 +442,95 @@ export const tasksApi = {
     }
   }
 };
+
+// Scanner session (for listing)
+export interface ScannerSessionInfo {
+  token: string;
+  userId: string;
+  userName: string;
+  createdAt: number;
+  lastAccess: number;
+  userAgent: string;
+  deviceType: 'mobile' | 'desktop' | 'unknown';
+}
+
+// Network (IP dinâmico para acesso na rede local)
+export const networkApi = {
+  getLocalAccess: async (): Promise<{ baseUrl: string | null; ips: string[]; port: number }> => {
+    const res = await fetch(`${API_BASE}/network/local-access`);
+    if (!res.ok) throw new Error('Erro ao obter IP');
+    return res.json();
+  }
+};
+
+// Scanner (remote) API
+export const scannerApi = {
+  start: async (): Promise<{ token: string; url: string }> => {
+    const res = await fetch(`${API_BASE}/scanner/start`, {
+      method: 'POST',
+      credentials: 'include'
+    });
+    if (!res.ok) throw new Error('Erro ao gerar link do scanner');
+    return res.json();
+  },
+  poll: async (token: string): Promise<{ barcodes: string[] }> => {
+    const res = await fetch(`${API_BASE}/scanner/poll/${encodeURIComponent(token)}`, {
+      credentials: 'include'
+    });
+    if (!res.ok) throw new Error('Erro ao obter códigos');
+    return res.json();
+  },
+  send: async (token: string, barcode: string): Promise<{ ok: boolean; product?: { name: string } }> => {
+    const res = await fetch(`${API_BASE}/scanner/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, barcode }),
+      credentials: 'include'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao enviar');
+    }
+    return res.json();
+  },
+  ping: async (token: string): Promise<{ ok: boolean; expiresIn: number; deviceType: string }> => {
+    const res = await fetch(`${API_BASE}/scanner/ping`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Link expirado');
+    }
+    return res.json();
+  },
+  sessions: async (): Promise<ScannerSessionInfo[]> => {
+    const res = await fetch(`${API_BASE}/scanner/sessions`, { credentials: 'include' });
+    if (!res.ok) throw new Error('Erro ao listar sessões');
+    return res.json();
+  },
+  revoke: async (token: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/scanner/revoke/${encodeURIComponent(token)}`, {
+      method: 'POST',
+      credentials: 'include'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao revogar');
+    }
+  },
+  renew: async (token: string): Promise<{ token: string; url: string }> => {
+    const res = await fetch(`${API_BASE}/scanner/renew`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+      credentials: 'include'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao renovar');
+    }
+    return res.json();
+  }
+};

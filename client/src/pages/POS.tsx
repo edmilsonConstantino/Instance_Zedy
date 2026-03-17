@@ -1,6 +1,6 @@
 import { useAuth } from '@/lib/auth';
 import { useCart } from '@/lib/cart';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,11 +8,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, QrCode, AlertCircle, ShoppingBag, ArrowRight, Percent, Scale, Check, LayoutGrid, List } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
-import { Product, productsApi, categoriesApi, salesApi } from '@/lib/api';
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, QrCode, AlertCircle, ShoppingBag, ArrowRight, Percent, Scale, Check, LayoutGrid, List, ScanLine, Smartphone, Camera, RefreshCw, Monitor } from 'lucide-react';
+import { formatCurrency, cn } from '@/lib/utils';
+import { Product, productsApi, categoriesApi, salesApi, scannerApi, networkApi, ScannerSessionInfo } from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
+import { BarcodeCameraScan } from '@/components/BarcodeCameraScan';
 
 export default function POS() {
   const { user } = useAuth();
@@ -67,8 +68,30 @@ export default function POS() {
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
   const [activeDiscount, setActiveDiscount] = useState({ type: 'none', value: 0 });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [cameraScanOpen, setCameraScanOpen] = useState(false);
+  const [remoteScannerOpen, setRemoteScannerOpen] = useState(false);
+  const [scannerToken, setScannerToken] = useState<string | null>(null);
+  const [scannerUrl, setScannerUrl] = useState<string>('');
+  const [scannerSessions, setScannerSessions] = useState<ScannerSessionInfo[]>([]);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   const canApplyDiscount = user?.role === 'admin' || user?.role === 'manager';
+
+  const processBarcode = (barcode: string) => {
+    const code = barcode.trim();
+    if (!code) return;
+    const product = products.find(
+      (p) =>
+        p.sku === code ||
+        p.sku.toLowerCase() === code.toLowerCase()
+    );
+    if (product) {
+      handleAddProduct(product);
+      setSearch('');
+    } else {
+      toast({ variant: 'destructive', title: 'Item não encontrado', description: `Código ${code} não existe no cadastro.` });
+    }
+  };
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -422,6 +445,40 @@ export default function POS() {
                 onChange={(e) => setSearch(e.target.value)}
                 data-testid="input-search-products"
               />
+            </div>
+            <div className="flex gap-1 shrink-0">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-10 w-10"
+                onClick={() => setCameraScanOpen(true)}
+                title="Escanear com câmera"
+              >
+                <Camera className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={scannerToken ? 'default' : 'outline'}
+                size="icon"
+                className={cn("h-10 w-10", scannerToken && "bg-emerald-600 hover:bg-emerald-500")}
+                onClick={async () => {
+                  if (scannerToken) {
+                    setRemoteScannerOpen(true);
+                    return;
+                  }
+                  try {
+                    const { token, url } = await scannerApi.start();
+                    setScannerToken(token);
+                    setScannerUrl(url);
+                    setRemoteScannerOpen(true);
+                    scannerApi.sessions().then(setScannerSessions).catch(() => setScannerSessions([]));
+                  } catch {
+                    toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível gerar o link' });
+                  }
+                }}
+                title={scannerToken ? "Scanner ativo - abrir painel" : "Usar celular como scanner"}
+              >
+                <Smartphone className="h-4 w-4" />
+              </Button>
             </div>
             <div className="flex border rounded-xl overflow-hidden">
               <Button
@@ -1021,6 +1078,308 @@ export default function POS() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Remote scanner poller - corre em background mesmo com dialog fechado */}
+      {scannerToken && (
+        <RemoteScannerPoller
+          token={scannerToken}
+          onBarcode={processBarcode}
+          onClose={() => {
+            setRemoteScannerOpen(false);
+            setScannerToken(null);
+          }}
+        />
+      )}
+
+      <RemoteScannerDialog
+        open={remoteScannerOpen}
+        onOpenChange={(o) => setRemoteScannerOpen(o)}
+        token={scannerToken}
+        url={scannerUrl}
+        onTokenChange={(t, u) => { setScannerToken(t); setScannerUrl(u || ''); }}
+        onSessionsChange={setScannerSessions}
+      />
+
+      {/* Dialog de scan com câmera */}
+      <Dialog open={cameraScanOpen} onOpenChange={setCameraScanOpen}>
+        <DialogContent className="sm:max-w-lg" aria-describedby="camera-scan-desc">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5" />
+              Escanear código de barras
+            </DialogTitle>
+            <DialogDescription id="camera-scan-desc">
+              Capte uma foto do código. O sistema processa em escala cinza e extrai o código para verificar.
+            </DialogDescription>
+          </DialogHeader>
+          <BarcodeCameraScan
+            id="pos-camera-scan"
+            onScan={processBarcode}
+            onClose={() => setCameraScanOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function formatTimeAgo(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}min`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}min`;
+}
+
+function formatDeviceLabel(s: ScannerSessionInfo): string {
+  const dt = s.deviceType === 'mobile' ? 'Celular' : s.deviceType === 'desktop' ? 'Computador' : 'Dispositivo';
+  const ua = s.userAgent && s.userAgent.length > 0
+    ? (s.userAgent.length > 40 ? s.userAgent.slice(0, 40) + '…' : s.userAgent)
+    : 'N/A';
+  return `${dt} • ${ua}`;
+}
+
+function RemoteScannerDialog({
+  open,
+  onOpenChange,
+  token,
+  url,
+  onTokenChange,
+  onSessionsChange,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  token: string | null;
+  url: string;
+  onTokenChange: (t: string | null, u: string) => void;
+  onSessionsChange: (s: ScannerSessionInfo[]) => void;
+}) {
+  const [sessions, setSessions] = useState<ScannerSessionInfo[]>([]);
+  const [renewing, setRenewing] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [baseUrl, setBaseUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      networkApi.getLocalAccess().then((r) => setBaseUrl(r.baseUrl)).catch(() => setBaseUrl(null));
+    }
+  }, [open]);
+
+  const loadSessions = () => {
+    scannerApi.sessions()
+      .then((list) => { setSessions(list); onSessionsChange(list); })
+      .catch(() => { setSessions([]); });
+  };
+
+  useEffect(() => {
+    if (open) loadSessions();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const t = setInterval(loadSessions, 5000);
+    return () => clearInterval(t);
+  }, [open]);
+
+  const handleRenew = async () => {
+    if (!token) return;
+    setRenewing(true);
+    try {
+      const { token: t, url: u } = await scannerApi.renew(token);
+      onTokenChange(t, u);
+      toast({ title: 'Link renovado', description: 'O link foi estendido por mais 2 horas.' });
+      loadSessions();
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Erro', description: e instanceof Error ? e.message : 'Não foi possível renovar' });
+    } finally {
+      setRenewing(false);
+    }
+  };
+
+  const handleRevoke = async (t: string) => {
+    setRevoking(t);
+    try {
+      await scannerApi.revoke(t);
+      toast({ title: 'Sessão revogada' });
+      if (t === token) onTokenChange(null, '');
+      loadSessions();
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Erro', description: e instanceof Error ? e.message : 'Não foi possível revogar' });
+    } finally {
+      setRevoking(null);
+    }
+  };
+
+  const handleNewLink = async () => {
+    try {
+      const { token: newToken, url: newUrl } = await scannerApi.start();
+      onTokenChange(newToken, newUrl);
+      loadSessions();
+      toast({ title: 'Novo link gerado' });
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Erro', description: e instanceof Error ? e.message : 'Não foi possível gerar link' });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="w-full max-w-sm sm:max-w-lg mx-auto rounded-2xl p-0 overflow-hidden"
+        aria-describedby="remote-scanner-desc"
+      >
+        {/* Header */}
+        <div className="bg-emerald-600 px-5 py-4 text-white">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-xl">
+              <Smartphone className="h-6 w-6" />
+            </div>
+            <div>
+              <DialogTitle className="text-white text-lg font-bold leading-tight">
+                Scanner com celular
+              </DialogTitle>
+              <DialogDescription id="remote-scanner-desc" className="text-emerald-100 text-xs mt-0.5">
+                Use a câmera do celular para escanear produtos
+              </DialogDescription>
+            </div>
+          </div>
+          {baseUrl && (
+            <div className="mt-3 bg-white/10 rounded-lg px-3 py-1.5">
+              <p className="text-emerald-100 text-xs">
+                Sistema: <span className="font-mono text-white">{baseUrl}</span>
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-4">
+          {(token && url) ? (
+            <div className="space-y-3">
+              {url.startsWith('http://') && (
+                <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2.5">
+                  <span className="text-amber-500 text-base leading-none mt-0.5">⚠</span>
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    Para a câmera funcionar, use HTTPS. Adicione <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">HTTPS=1</code> ao .env e reinicie.
+                  </p>
+                </div>
+              )}
+
+              {/* Link box */}
+              <div className="bg-muted/50 border rounded-xl p-3 space-y-2">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Link do scanner</p>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={url}
+                    className="font-mono text-xs h-10 bg-background"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-10 px-3 shrink-0"
+                    onClick={() => { navigator.clipboard.writeText(url); toast({ title: 'Link copiado!' }); }}
+                  >
+                    Copiar
+                  </Button>
+                </div>
+              </div>
+
+              {/* Action buttons — full width on mobile */}
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="secondary"
+                  className="h-11 text-sm font-medium"
+                  onClick={handleRenew}
+                  disabled={renewing}
+                >
+                  <RefreshCw className={cn("h-4 w-4 mr-2", renewing && "animate-spin")} />
+                  Renovar (2h)
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-11 text-sm font-medium text-destructive border-destructive/40 hover:bg-destructive/5"
+                  onClick={() => { handleRevoke(token); onOpenChange(false); }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Desconectar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button onClick={handleNewLink} className="w-full h-12 text-base bg-emerald-600 hover:bg-emerald-700">
+              <Smartphone className="h-5 w-5 mr-2" />
+              Gerar link de scanner
+            </Button>
+          )}
+
+          {/* Sessions */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold">Sessões ativas</p>
+              {sessions.length > 0 && (
+                <span className="text-xs bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-medium">
+                  {sessions.length}
+                </span>
+              )}
+            </div>
+            {sessions.length === 0 ? (
+              <div className="text-center py-4 text-muted-foreground">
+                <Monitor className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-xs">Nenhuma sessão ativa.</p>
+              </div>
+            ) : (
+              <ScrollArea className="max-h-44 rounded-xl border">
+                <div className="p-2 space-y-1.5">
+                  {sessions.map((s) => (
+                    <div key={s.token} className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-muted/40">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {s.deviceType === 'mobile'
+                          ? <Smartphone className="h-4 w-4 shrink-0 text-emerald-500" />
+                          : <Monitor className="h-4 w-4 shrink-0 text-amber-500" />}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate" title={s.userAgent}>{formatDeviceLabel(s)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Há {formatTimeAgo(Date.now() - s.lastAccess)}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+                        onClick={() => handleRevoke(s.token)}
+                        disabled={revoking === s.token}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+
+          <p className="text-xs text-muted-foreground text-center pb-1">
+            Códigos escaneados são adicionados automaticamente ao carrinho. Revogue sessões suspeitas.
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RemoteScannerPoller({ token, onBarcode, onClose }: { token: string; onBarcode: (b: string) => void; onClose: () => void }) {
+  useEffect(() => {
+    const t = setInterval(async () => {
+      try {
+        const { barcodes } = await scannerApi.poll(token);
+        barcodes.forEach(onBarcode);
+      } catch {
+        onClose();
+      }
+    }, 300);
+    return () => clearInterval(t);
+  }, [token, onBarcode, onClose]);
+  return null;
 }
