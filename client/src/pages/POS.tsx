@@ -391,7 +391,7 @@ export default function POS() {
       </Dialog>
 
       {/* Produtos - Desktop sempre, Mobile em aba */}
-      <div className="flex-1 flex flex-col min-w-0 bg-card rounded-xl border border-border shadow-sm overflow-hidden lg:block">
+      <div className="flex-1 flex flex-col min-w-0 bg-card rounded-xl border border-border shadow-sm overflow-hidden">
         <div className="p-3 lg:p-4 border-b border-border space-y-3">
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
             <button
