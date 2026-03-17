@@ -446,7 +446,7 @@ export default function POS() {
           </div>
         </div>
 
-        <ScrollArea className="flex-1 p-3 lg:p-4">
+        <ScrollArea className="flex-1 p-1.5 lg:p-4">
           {viewMode === 'list' ? (
             <div className="space-y-1.5">
               {filteredProducts.map(product => {
@@ -458,7 +458,7 @@ export default function POS() {
                 return (
                   <div
                     key={product.id}
-                    className={`w-full flex items-center bg-white rounded-xl border shadow-sm overflow-hidden transition-all ${parsedStock <= 0 ? 'opacity-50 pointer-events-none border-gray-100' : cartItem ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-100'}`}
+                    className={`w-full flex items-center bg-white rounded-xl border shadow-sm overflow-hidden transition-all ${parsedStock <= 0 ? 'opacity-50 pointer-events-none border-gray-100' : cartItem ? 'border-emerald-400 bg-emerald-50/30' : 'border-gray-200'}`}
                     data-testid={`card-product-${product.id}`}
                   >
                     {/* Faixa colorida esquerda */}
@@ -477,13 +477,13 @@ export default function POS() {
                       )}
                     </div>
 
-                    {/* Nome + preço (flex-1, truncate) */}
-                    <div className="flex-1 min-w-0 py-1.5 pr-1">
-                      <p className="text-xs font-semibold text-gray-800 truncate leading-tight">{product.name}</p>
+                    {/* Nome + preço */}
+                    <div className="flex-1 min-w-0 overflow-hidden py-1.5 pr-1">
+                      <p className="text-xs font-semibold text-gray-800 truncate leading-tight max-w-[120px]">{product.name}</p>
                       <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-xs font-bold text-orange-500">{formatCurrency(parsedPrice)}</span>
-                        <span className="text-[9px] text-gray-400">/{product.unit}</span>
-                        {product.unit === 'kg' && <Scale className="h-2.5 w-2.5 text-emerald-500" />}
+                        <span className="text-xs font-bold text-orange-500 truncate">{formatCurrency(parsedPrice)}</span>
+                        <span className="text-[9px] text-gray-400 shrink-0">/{product.unit}</span>
+                        {product.unit === 'kg' && <Scale className="h-2.5 w-2.5 text-emerald-500 shrink-0" />}
                       </div>
                     </div>
 
