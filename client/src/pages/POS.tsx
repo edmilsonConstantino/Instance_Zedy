@@ -500,40 +500,30 @@ export default function POS() {
                         </div>
                       </div>
 
-                      {/* Botão + ou controlo de quantidade */}
-                      {cartItem ? (
-                        <div className="shrink-0 flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="h-8 w-8 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors shadow-sm active:scale-95"
-                            onClick={() => handleQuantityChange(product.id, -1)}
-                            data-testid={`button-decrease-list-${product.id}`}
-                          >
-                            <Minus className="h-3.5 w-3.5 text-white" />
-                          </button>
-                          <span className="min-w-[24px] text-center text-xs font-bold text-emerald-700">
-                            {cartItem.quantity.toFixed(product.unit === 'kg' ? 1 : 0)}
-                          </span>
-                          <button
-                            type="button"
-                            className="h-8 w-8 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center transition-colors shadow-sm active:scale-95"
-                            onClick={() => handleQuantityChange(product.id, 1)}
-                            data-testid={`button-increase-list-${product.id}`}
-                          >
-                            <Plus className="h-3.5 w-3.5 text-white" />
-                          </button>
-                        </div>
-                      ) : (
+                      {/* Controlo de quantidade sempre visível */}
+                      <div className="shrink-0 flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
                         <button
                           type="button"
-                          className="shrink-0 h-9 w-9 rounded-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 flex items-center justify-center shadow-md transition-colors disabled:opacity-40"
+                          className={`h-8 w-8 rounded-full flex items-center justify-center transition-colors shadow-sm active:scale-95 ${cartItem ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-200 cursor-not-allowed'}`}
+                          onClick={() => cartItem && handleQuantityChange(product.id, -1)}
+                          disabled={!cartItem || parsedStock <= 0}
+                          data-testid={`button-decrease-list-${product.id}`}
+                        >
+                          <Minus className="h-3.5 w-3.5 text-white" />
+                        </button>
+                        <span className="min-w-[24px] text-center text-xs font-bold text-gray-700">
+                          {cartItem ? cartItem.quantity.toFixed(product.unit === 'kg' ? 1 : 0) : '0'}
+                        </span>
+                        <button
+                          type="button"
+                          className="h-8 w-8 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center transition-colors shadow-sm active:scale-95 disabled:opacity-40"
                           onClick={(e) => { e.stopPropagation(); if (parsedStock > 0) handleAddProduct(product); }}
                           disabled={parsedStock <= 0}
                           data-testid={`button-add-${product.id}`}
                         >
-                          <Plus className="h-4 w-4 text-white" />
+                          <Plus className="h-3.5 w-3.5 text-white" />
                         </button>
-                      )}
+                      </div>
                     </div>
                 );
               })}
