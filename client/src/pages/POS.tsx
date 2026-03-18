@@ -534,7 +534,7 @@ export default function POS() {
                       )}
                     </div>
 
-                    {/* Nome (em baixo) + preço */}
+                    {/* Nome (em baixo) + preço + stock */}
                     <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-end pb-2 pt-1 pr-1">
                       <p className="text-xs font-semibold text-gray-800 truncate leading-tight max-w-[120px]">{product.name}</p>
                       <div className="flex items-center gap-1 mt-0.5">
@@ -542,6 +542,9 @@ export default function POS() {
                         <span className="text-[9px] text-gray-400 shrink-0">/{product.unit}</span>
                         {product.unit === 'kg' && <Scale className="h-2.5 w-2.5 text-emerald-500 shrink-0" />}
                       </div>
+                      <span className="text-[9px] text-emerald-600 font-medium mt-0.5">
+                        Est: {parsedStock.toFixed(product.unit === 'kg' ? 1 : 0)} {product.unit}
+                      </span>
                     </div>
 
                     {/* Controlos — centrados verticalmente */}
